@@ -196,7 +196,7 @@ class Session(TimestampMixin, Base):
     memory_extraction_enabled = Column(Boolean, default=True)
     memory_injection_enabled = Column(Boolean, default=True)
     skill_injection_enabled = Column(Boolean, default=True)
-    thinking_mode = Column(String, nullable=True, default="off")
+    thinking_mode = Column(String, nullable=True, default="on")
     temperature_override = Column(Float, nullable=True, default=None)
     max_tokens_override = Column(Integer, nullable=True, default=None)
 
@@ -1046,7 +1046,7 @@ def _migrate_add_session_generation_settings_columns():
         conn = sqlite3.connect(db_path)
         columns = {row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()}
         additions = {
-            "thinking_mode": "VARCHAR DEFAULT 'off'",
+            "thinking_mode": "VARCHAR DEFAULT 'on'",
             "temperature_override": "FLOAT",
             "max_tokens_override": "INTEGER",
         }

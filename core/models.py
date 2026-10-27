@@ -121,7 +121,7 @@ class Session:
     memory_extraction_enabled: bool = True
     memory_injection_enabled: bool = True
     skill_injection_enabled: bool = True
-    thinking_mode: str = "off"
+    thinking_mode: str = "on"
     temperature_override: Optional[float] = None
     max_tokens_override: Optional[int] = None
     cwd: Optional[str] = None
