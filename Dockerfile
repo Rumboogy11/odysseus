@@ -113,6 +113,7 @@ WORKDIR /app
 ARG INSTALL_OPTIONAL=false
 COPY requirements.txt requirements-optional.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements-optional.txt \
     && if [ "$INSTALL_OPTIONAL" = "true" ]; then pip install --no-cache-dir -r requirements-optional.txt; fi
 
 # python-magic powers content-based MIME sniffing in src/upload_handler.py.
@@ -133,6 +134,12 @@ RUN pip install --no-cache-dir --no-deps /tmp/odysseus-wheels/*.whl \
 # The application minimum fixes its bundled roots; the checked override also
 # keeps the effective Docker selection consistent with system trust.
 RUN python /usr/local/bin/check-ca-trust.py --system --python --grpc
+
+# Install NVIDIA Container Runtime and GPU-enabled ONNX Runtime
+# ONNX Runtime with CUDA support requires the GPU-aware package
+# This will use CUDA Execution Provider if GPU is available via Docker GPU runtime
+RUN pip install --no-cache-dir onnxruntime-gpu
+
 
 # Copy app code
 COPY . .

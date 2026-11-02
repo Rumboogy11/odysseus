@@ -7,15 +7,24 @@ onnxruntime>=1.20,<2
 # Note: chromadb-client + fastembed moved to requirements.txt — RAG, semantic
 # memory, and tool selection are core paths, so they ship by default now.
 
+# GPU acceleration - torch for CUDA-enabled model inference and image tools
+# Required by sam_mask, realesrgan, and image-enhancement features
+torch
+
+# Transformers for HuggingFace models - required by sam_mask for image segmentation
+transformers
+
 # Local speech-to-text (microphone -> text) via faster-whisper, for the
 # "local" STT provider. Runs on CPU out of the box (CTranslate2 backend, no
 # torch needed). Install if you want to dictate/transcribe with the mic
 # without sending audio to an external endpoint.
-# Optional extra: install `torch` too if you have a CUDA GPU and want
-# GPU-accelerated transcription — it's auto-detected, CPU is used otherwise.
-faster-whisper
 
-# Local text-to-speech via Kokoro-82M for the "local" TTS provider.
+# Office document processing - markitdown for .docx/.pptx/.xlsx → Markdown, PyMuPDF for advanced PDF ops
+# Enables the office_docs and pymupdf cookbook dependencies
+markitdown[docx,pptx,xlsx,xls]
+PyMuPDF
+
+# Local text-to-speech via Kokoro-82M
 # Kokoro 0.9.4 declares Python >=3.10,<3.13; Odysseus itself requires 3.11+,
 # so pip installs these extras on 3.11-3.12 and deliberately skips them on
 # Python 3.13+ (including the Python 3.14 container image). Kokoro declares

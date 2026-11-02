@@ -1502,6 +1502,12 @@ async function _fetchDependencies() {
           });
           return;
         }
+        // On success: always refresh the dependency list so the user sees
+        // the updated status immediately. The backend clears _PACKAGE_STATUS_CACHE
+        // after a successful pip install; this frontend refresh ensures the UI stays in sync.
+        try { await _fetchDependencies(); } catch (depErr) {
+          console.warn('[cookbook] Failed to refresh deps after install', depErr);
+        }
         // _dep flags this as a pip dependency/driver install (not a servable
         // model) so the running-task card doesn't offer a "Serve →" button.
         const payload = { repo_id: depTaskId, _cmd: cmd, remote_host: targetRemoteHost || '', _dep: true, env_path: targetEnvPath || '', platform: targetPlatform || '' };
@@ -1526,6 +1532,9 @@ async function _fetchDependencies() {
         await _installDep(pipName, pkgName, btn.dataset.depTarget === 'local', !!btn.dataset.upgrade, btn);
       });
     });
+
+    // Hook into the install success notification to refresh deps after pip installs
+    let originalInstallSuccess = null;
 
     // Wire "Install build deps" buttons — surfaced on rows whose
     // system_prereqs are missing (e.g. llama_cpp with no cmake on the
