@@ -526,6 +526,47 @@ def test_display_math_still_renders_through_katex(node_available):
     assert "$$" not in html
 
 
+def test_padded_inline_math_renders_through_katex(node_available):
+    # Models commonly pad single-dollar delimiters ("$ x $"). The Pandoc-style
+    # currency guard required a non-space right after the opening $, so prose
+    # lines carrying padded formulas stayed literal while $$...$$ lines rendered.
+    html = _run_markdown_case(
+        "- **Distances**: $ d = 3 \\, \\text{ft} \\Rightarrow AC = 12 \\, \\text{ft} $",
+        with_katex=True,
+    )
+
+    assert (
+        '<span class="katex" data-display="false">'
+        'd = 3 \\, \\text{ft} \\Rightarrow AC = 12 \\, \\text{ft}</span>'
+    ) in html
+    assert "$ d" not in html
+
+
+def test_padded_inline_math_starting_with_a_number_renders(node_available):
+    # A leading pad followed by a digit is only accepted when the body carries
+    # TeX syntax, so "$ 7.22 \, \text{kips} $" is math but "$ 5" stays currency.
+    html = _run_markdown_case("- **Horizontal**: $ 7.22 \\, \\text{kips} $", with_katex=True)
+
+    assert (
+        '<span class="katex" data-display="false">7.22 \\, \\text{kips}</span>'
+    ) in html
+
+
+def test_spaced_currency_amounts_are_not_rendered_as_math(node_available):
+    html = _run_markdown_case("It costs $ 5 and $ 10 in total.", with_katex=True)
+
+    assert 'class="katex"' not in html
+    assert "$ 5" in html
+    assert "$ 10" in html
+
+
+def test_math_at_line_start_keeps_its_paragraph(node_available):
+    html = _run_markdown_case("$x$ is the variable.", with_katex=True)
+
+    assert html.startswith("<p><span class=\"katex\"")
+    assert html.rstrip().endswith("</p>")
+
+
 def test_dotted_python_import_paths_are_not_autolinked(node_available):
     html = _run_markdown_case(
         "from imblearn.combine import SMOTETomek\n"

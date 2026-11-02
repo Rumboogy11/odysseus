@@ -226,10 +226,10 @@ def _package_installed_from_probe(name: str, probe: dict) -> bool:
         )
     if name == "office_docs":
         return bool(
-            dists.get("markitdown")
+            dists.get("markitdown")  # markitdown package (may have extras installed)
             or modules.get("markitdown", {}).get("real_module")
             or dists.get("python-docx")
-            or modules.get("docx", {}).get("real_module")
+            or modules.get("python_docx", {}).get("real_module")
         )
     if name == "psd_tools":
         return bool(dists.get("psd-tools") or modules.get("psd_tools", {}).get("real_module"))
@@ -2066,6 +2066,10 @@ def setup_shell_routes() -> APIRouter:
             "hdbscan",
             "vllm",
             "mlx-lm",
+            # ── Tools packages ──
+            "office_docs",           # markitdown with extras expands to markitdown
+            "pymupdf",               # PyMuPDF installation 
+            "markitdown[docx,pptx,xlsx,xls]",  # office_docs explicit install
         }
         if pip_name not in known:
             return {"ok": False, "error": f"Unknown package: {pip_name}"}
@@ -2075,8 +2079,12 @@ def setup_shell_routes() -> APIRouter:
         )
         stdout, stderr = await proc.communicate()
         _PACKAGE_STATUS_CACHE.clear()
+        # Clear specific status for this package if it was cached
+        pkg_key = ((host or ""), (ssh_port or ""), (venv or ""), (backend or "").lower())
+        if pkg_key in _PACKAGE_STATUS_CACHE and len(_PACKAGE_STATUS_CACHE) < 10:
+            del _PACKAGE_STATUS_CACHE[pkg_key]
         if proc.returncode == 0:
-            return {"ok": True, "output": stdout.decode()[-200:]}
+            return {"ok": True, "output": stdout.decode()[-200:], "cache_cleared": True}
         return {"ok": False, "error": stderr.decode()[-300:]}
 
     @router.post("/api/cookbook/install-system-deps")

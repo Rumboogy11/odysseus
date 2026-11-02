@@ -26,6 +26,8 @@ secrets.env.*
 
 # Data — all user data stays local
 data/
+# ChromaDB bind mount (compose: ./chroma-db:/data). User data, never tracked.
+chroma-db/
 # Per-worktree runtime state written by `odysseus dev` (its own data dir,
 # logs and stop handle) — disposable, and never shared between checkouts.
 .odysseus-dev/

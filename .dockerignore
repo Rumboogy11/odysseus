@@ -22,6 +22,9 @@ secrets.env~
 !secrets.env.example
 /data/
 /logs/
+# User data trees (bind-mounted at runtime) — keep them out of the build
+# context so rebuilds stay fast and never bake personal data into an image.
+/chroma-db/
 .git/
 .claude/
 .playwright-mcp/

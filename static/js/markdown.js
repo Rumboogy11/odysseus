@@ -1135,11 +1135,24 @@ export function mdToHtml(src, opts) {
   s = s.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
     try { return pushMath(math, true); } catch (e) { return match; }
   });
+  // Padded inline math: "$ x $" / "$ \frac{a}{b} $". Models routinely pad the
+  // single-dollar delimiters, and the strict pass below rejects the trailing
+  // space before the closing $, leaving whole prose+math lines as literal
+  // source. Currency stays literal: a digit right after the opening pad is only
+  // accepted when the body carries a TeX-ish character ($ 7.22 \, \text{kips} $),
+  // never for "$ 5 and $ 10". Both pads are required so an unspaced "$5, ... $x$"
+  // cannot pair the currency dollar with the real formula's opening dollar.
+  s = s.replace(
+    /(?<![\$\d])\$(?!\$)[ \t]+(?=[^\s\d]|[^$\n]*[\\^_{}=+\-*/|<>()\/\[\]%&])([^$\n]*?\S)[ \t]+\$(?!\$|[ \t]*\d)/g,
+    (match, math) => {
+      try { return pushMath(math, false); } catch (e) { return match; }
+    }
+  );
   // Inline math: $...$ — single line only, and Pandoc-style delimiter rules so
   // currency doesn't render as math ("$5 to $10"): the opening $ must be
   // immediately followed by a non-space, the closing $ must be immediately
   // preceded by a non-space and not followed by a digit.
-  s = s.replace(/(?<![\$\d])\$(?!\$)(?=\S)([^\$\n]+?)(?<=\S)\$(?!\$|\d)/g, (match, math) => {
+  s = s.replace(/(?<![\$\d])\$(?!\$)(?=\S)([^$\n]+?)(?<=\S)\$(?!\$|\d)/g, (match, math) => {
     try { return pushMath(math, false); } catch (e) { return match; }
   });
 
@@ -1215,8 +1228,21 @@ export function mdToHtml(src, opts) {
   s = s.replace(/(?:^|\n)(<bq>[\s\S]*?)(?=\n(?!<bq>)|$)/g, m =>
     `<blockquote>${m.trim().replace(/<\/?bq>/g, (t) => t === '<bq>' ? '<p>' : '</p>')}</blockquote>`);
 
-  // Paragraphs - but NOT for code block placeholders or allowed HTML
-  s = s.replace(/^(?!<h\d|<ul>|<ol>|<li|<oli>|<\/li>|<pre>|<blockquote>|<bq>|<hr>|___CODE_BLOCK_|___ALLOWED_HTML_|___MATH_BLOCK_|___MERMAID_BLOCK_|___SVG_BLOCK_)([^\n]+)$/gm, '<p>$1</p>');
+  // Paragraphs - but NOT for code block placeholders or allowed HTML. A line
+  // may start with a math placeholder and still carry prose ("$x$ is the ..."):
+  // that belongs in a <p>. Only a standalone display-math placeholder stays
+  // unwrapped, since .katex-display is already a block.
+  s = s.replace(
+    /^(?!<h\d|<ul>|<ol>|<li|<oli>|<\/li>|<pre>|<blockquote>|<bq>|<hr>|___CODE_BLOCK_|___ALLOWED_HTML_|___MERMAID_BLOCK_|___SVG_BLOCK_)([^\n]+)$/gm,
+    (match, line) => {
+      const mathOnly = line.match(/^___MATH_BLOCK_(\d+)___$/);
+      if (mathOnly) {
+        const block = mathBlocks[Number(mathOnly[1])] || '';
+        if (block.includes('katex-display') || block.includes('data-display="true"')) return match;
+      }
+      return `<p>${line}</p>`;
+    }
+  );
 
   // Line breaks within paragraphs
   s = s.replace(/<p>([\s\S]*?)<\/p>/g, (match, content) => {
