@@ -1261,36 +1261,29 @@ export function mdToHtml(src, opts) {
   // sequences are ordinary content in fenced code (`perl -pe 's/x/$& y/'`,
   // `echo "$$USD"`). A function replacer inserts its return value verbatim.
 
+  // Restore the extracted blocks. Each group is restored in a single regex pass
+  // instead of a full-string `.replace` per block. With M placeholders the old
+  // per-block loop was O(M*N) and dominated rendering of inline-heavy prose — a
+  // 120 KB paragraph with many inline code spans / links took ~160 ms because
+  // every one of thousands of placeholders rescanned the whole document. Group
+  // order still matters: a restored block can carry a later group's placeholder
+  // (e.g. an <a> label containing inline code), so the original order is kept.
+  const restoreBlocks = (prefix, blocks) => {
+    if (!blocks.length) return;
+    s = s.replace(new RegExp(`___${prefix}_(\\d+)___`, 'g'), (m, i) => blocks[Number(i)] ?? m);
+  };
+
   // CRITICAL: Restore allowed HTML blocks first
-  allowedHtmlBlocks.forEach((block, index) => {
-    s = s.replace(`___ALLOWED_HTML_${index}___`, () => block);
-  });
-
-  // Restore math blocks
-  mathBlocks.forEach((block, index) => {
-    s = s.replace(`___MATH_BLOCK_${index}___`, () => block);
-  });
-
-  // Restore mermaid diagram blocks
-  mermaidBlocks.forEach((block, index) => {
-    s = s.replace(`___MERMAID_BLOCK_${index}___`, () => block);
-  });
-
+  restoreBlocks('ALLOWED_HTML', allowedHtmlBlocks);
+  restoreBlocks('MATH_BLOCK', mathBlocks);
+  restoreBlocks('MERMAID_BLOCK', mermaidBlocks);
   // Restore isolated inline SVG previews before ordinary code blocks.
-  svgBlocks.forEach((block, index) => {
-    s = s.replace(`___SVG_BLOCK_${index}___`, () => block);
-  });
-
+  restoreBlocks('SVG_BLOCK', svgBlocks);
   // CRITICAL: Restore code blocks at the end
-  codeBlocks.forEach((block, index) => {
-    s = s.replace(`___CODE_BLOCK_${index}___`, () => block);
-  });
-
+  restoreBlocks('CODE_BLOCK', codeBlocks);
   // Restore inline code spans last, so placeholders carried inside restored
   // <a>/allowed-HTML blocks are resolved too.
-  inlineCodeBlocks.forEach((block, index) => {
-    s = s.replace(`___INLINE_CODE_${index}___`, () => block);
-  });
+  restoreBlocks('INLINE_CODE', inlineCodeBlocks);
 
   return _useSvgEmoji() ? svgifyEmoji(s, opts) : s;
 }

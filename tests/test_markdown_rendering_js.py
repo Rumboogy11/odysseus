@@ -488,6 +488,26 @@ def test_fenced_code_keeps_double_dollar(node_available):
     assert "$$USD and $$" in html
 
 
+def test_many_placeholders_restore_in_one_pass(node_available):
+    # The block-restore pass used one full-string `.replace` per placeholder,
+    # which is O(M*N) and dominated rendering of inline-heavy prose (a 120 KB
+    # paragraph took ~160 ms because every one of thousands of placeholders
+    # rescanned the whole document). It is now a single regex pass per group.
+    # Verify a document with many placeholders from several groups resolves
+    # completely, including an inline-code span nested inside a converted link
+    # (restored by the later INLINE_CODE pass after ALLOWED_HTML).
+    spans = "\n\n".join(f"`cmd_{i}`" for i in range(200))
+    markdown = f"[see `nested_cmd`](https://example.com)\n\n{spans}\n\n```sh\necho hi\n```"
+    html = _run_markdown_case(markdown)
+
+    assert "___" not in html
+    assert "<code>nested_cmd</code>" in html
+    assert "https://example.com" in html
+    assert "<code>cmd_0</code>" in html
+    assert "<code>cmd_199</code>" in html
+    assert "echo hi" in html
+
+
 def test_mermaid_block_keeps_dollar_ampersand(node_available):
     # The mermaid restore site had the same hazard: a node label containing `$&`
     # re-inserted the ___MERMAID_BLOCK_n___ placeholder into the diagram source,
