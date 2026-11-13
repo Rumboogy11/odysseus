@@ -7,7 +7,7 @@
 import themeModule from './theme.js?v=20260911organsrain1';
 import * as Modals from './modalManager.js';
 import spinnerModule from './spinner.js';
-import { registerMenuDismiss, dismissTopEscapeLayer, dismissOrRemove } from './escMenuStack.js';
+import { registerMenuDismiss, dismissTopEscapeLayer, dismissOrRemove, _openMenuCount } from './escMenuStack.js';
 import { nextToolWindowZ, topToolWindowZ, topPortalZ } from './toolWindowZOrder.js';
 
 let toastEl = null;
@@ -991,6 +991,12 @@ function _initScrollDismiss() {
   const chatHistory = document.getElementById('chat-history');
   if (chatHistory) {
     chatHistory.addEventListener('scroll', () => {
+      // Nothing dismissable is open → skip two O(DOM) scans. Every transient
+      // layer (dropdown menus, context popups) registers on the escape stack,
+      // so a zero count means there is nothing to close. This handler runs on
+      // every frame of the smooth-scroll animation during streaming, so the
+      // scans were a per-frame cost over the whole document.
+      if (_openMenuCount() === 0) return;
       chatHistory.querySelectorAll('.dropdown.show').forEach(d => d.classList.remove('show'));
       document.querySelectorAll('.ctx-popup').forEach(dismissOrRemove);
     }, { passive: true });
