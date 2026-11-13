@@ -3290,6 +3290,10 @@ export function addMessage(role, content, modelName, metadata) {
       const maxRound = Math.max(toolRounds.length ? Math.max(...toolRounds) : 0, roundTexts.length);
 
       const firstRound = (toolsByRound[0] || []).length ? 0 : 1;
+      // Snapshot the history length so the post-build highlight/mermaid pass can
+      // scan only the nodes this call appended, instead of re-walking every
+      // previously rendered message (O(N^2) across a loaded conversation).
+      const _scanStart = box.children.length;
       for (let roundNum = firstRound; roundNum <= maxRound; roundNum++) {
         const r = roundNum - 1;
 	        let txt = r >= 0
@@ -3460,10 +3464,12 @@ export function addMessage(role, content, modelName, metadata) {
         if (metadata) displayMetrics(firstWrap, metadata);
       }
 
+      const _newNodes = [];
+      for (let i = _scanStart; i < box.children.length; i++) _newNodes.push(box.children[i]);
       if (window.hljs) {
-        box.querySelectorAll('pre code:not(.hljs)').forEach(b => window.hljs.highlightElement(b));
+        _newNodes.forEach(n => n.querySelectorAll('pre code:not(.hljs)').forEach(b => window.hljs.highlightElement(b)));
       }
-      if (markdownModule.renderMermaid) markdownModule.renderMermaid(box);
+      if (markdownModule.renderMermaid) _newNodes.forEach(n => markdownModule.renderMermaid(n));
       if (pendingAskUser) {
         // Session history is rendered oldest-to-newest.  A later user message
         // removes this card; if there is none, the pending choice survives a

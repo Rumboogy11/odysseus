@@ -3970,6 +3970,9 @@ import { invalidateSettings } from './appConfig.js';
           const replyElement = document.createElement('div');
           replyElement.className = 'live-reply-content';
           replyHost.appendChild(replyElement);
+          // Cache on the host so _renderStream can find it without re-scanning
+          // the whole growing message on every token.
+          replyHost._liveReplyEl = replyElement;
         }
         _renderStream();
       }
@@ -4061,8 +4064,12 @@ import { invalidateSettings } from './appConfig.js';
       // Keep processing visible through whitespace/control-only deltas. Swap
       // it out only after replacement content is in the DOM, in the same paint.
       function _finishProcessingWhenVisible(content) {
-        if (content && (content.textContent.trim() || content.querySelector('img, svg, canvas'))
-            && spinner && spinner.element) spinner.destroy();
+        // Check the spinner first: once it is destroyed its element is null and
+        // there is nothing left to do. Testing content first serialized the whole
+        // growing message (textContent) on every streamed delta, turning the
+        // stream into O(N^2) DOM reads after the first visible token.
+        if (spinner && spinner.element && content
+            && (content.textContent.trim() || content.querySelector('img, svg, canvas'))) spinner.destroy();
       }
 
       // Direct render helper for streaming text
@@ -4097,8 +4104,13 @@ import { invalidateSettings } from './appConfig.js';
           return;
         }
 
-        // If thinking was already collapsed in-place, only render the reply portion
-        let liveReply = contentEl.querySelector('.live-reply-content');
+        // If thinking was already collapsed in-place, only render the reply portion.
+        // Reuse the node cached at creation (see _finishLiveThinkingTransition) so
+        // the common no-thinking path avoids an O(subtree) querySelector per token.
+        // The class check covers the terminal render, which clears the class in place.
+        let liveReply = contentEl._liveReplyEl;
+        if (liveReply && (!contentEl.contains(liveReply) || !liveReply.classList.contains('live-reply-content'))) liveReply = null;
+        if (!liveReply) liveReply = contentEl.querySelector('.live-reply-content');
         if (liveReply) {
           // Extract reply text — handle native <think> tags and non-tag patterns
           let replyTrimmed = replyText === null ? '' : String(replyText);
