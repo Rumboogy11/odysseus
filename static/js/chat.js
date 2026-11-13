@@ -3672,6 +3672,8 @@ import { invalidateSettings } from './appConfig.js';
       let _liveThinkDomId = null;
       let _liveThinkRenderThrottle = null;
       let _liveThinkLatestText = '';
+      let _liveThinkRenderedLen = 0;
+      let _liveThinkScrollRaf = null;
       let _liveThinkTimerId = null;
       let _liveThinkReducedMotion = false;
 
@@ -3723,11 +3725,41 @@ import { invalidateSettings } from './appConfig.js';
         const target = _liveThinkInner;
         if (!target || !target.isConnected) return;
         const thinkBox = target.closest('.thinking-content');
-        const nearBottom = !thinkBox || thinkBox.scrollHeight - thinkBox.clientHeight - thinkBox.scrollTop < 80;
-        target.style.whiteSpace = 'pre-wrap';
-        target.textContent = _liveThinkLatestText;
-        if (thinkBox && nearBottom) thinkBox.scrollTop = thinkBox.scrollHeight;
-        if (nearBottom) uiModule.scrollHistory();
+        const isExpanded = thinkBox && thinkBox.classList.contains('expanded');
+        // Collapsed: keep the text current but skip every DOM/layout write until
+        // the user expands the box. This stops the whole cumulative trace from
+        // being rewritten and re-laid-out on each ~100 ms commit while hidden.
+        if (!isExpanded) {
+          _liveThinkRenderedLen = _liveThinkLatestText.length;
+          return;
+        }
+        // Incremental: append only newly added characters instead of replacing
+        // the whole text node on every commit.
+        const prevLen = _liveThinkRenderedLen || 0;
+        const added = _liveThinkLatestText.slice(prevLen);
+        if (added) {
+          const first = target.firstChild;
+          if (first && first.nodeType === Node.TEXT_NODE) {
+            first.appendData(added);
+          } else {
+            target.textContent = _liveThinkLatestText;
+          }
+          target.style.whiteSpace = 'pre-wrap';
+          _liveThinkRenderedLen = _liveThinkLatestText.length;
+        }
+        // Coalesce the forced-layout scroll read/write and scrollHistory into a
+        // single rAF per frame, auto-scrolling only when the box is near bottom.
+        if (_liveThinkScrollRaf === null) {
+          _liveThinkScrollRaf = requestAnimationFrame(() => {
+            _liveThinkScrollRaf = null;
+            if (!thinkBox || !thinkBox.isConnected) return;
+            const nearBottom = thinkBox.scrollHeight - thinkBox.clientHeight - thinkBox.scrollTop < 80;
+            if (nearBottom) {
+              thinkBox.scrollTop = thinkBox.scrollHeight;
+              uiModule.scrollHistory();
+            }
+          });
+        }
       }
 
       function _ensureLiveThinkingThrottle() {
@@ -3760,8 +3792,26 @@ import { invalidateSettings } from './appConfig.js';
       }
 
       function _queueLiveThinking(text, prepared = false) {
+        // Skip all live-thinking work (text normalization, throttle, DOM) while
+        // the box is hidden — collapsed by the user or hidden globally via the
+        // "hide thinking sections" setting. The cumulative text is still tracked
+        // so a later expand/flush can render it. This prevents the per-100 ms
+        // cumulative-text processing from running while nothing is on screen.
+        if (_isLiveThinkHidden()) {
+          _liveThinkLatestText = String(text ?? '');
+          return;
+        }
         _ensureLiveThinkingThrottle().update({ text, prepared });
         _startLiveThinkTimer();
+      }
+
+      function _isLiveThinkHidden() {
+        if (!_liveThinkInner) return false;
+        const thinkBox = _liveThinkInner.closest('.thinking-content');
+        if (!thinkBox) return false;
+        if (!thinkBox.classList.contains('expanded')) return true;
+        if (document.body.classList.contains('hide-thinking')) return true;
+        return false;
       }
 
       function _removeLiveThinkingSpinner() {
@@ -3784,8 +3834,18 @@ import { invalidateSettings } from './appConfig.js';
         if (text !== null) _queueLiveThinking(text, true);
         if (_liveThinkRenderThrottle) _liveThinkRenderThrottle.flush();
         if (rich && _liveThinkInner && _liveThinkInner.isConnected) {
+          const thinkBox = _liveThinkInner.closest('.thinking-content');
+          const isExpanded = thinkBox && thinkBox.classList.contains('expanded');
           _liveThinkInner.style.whiteSpace = '';
-          _liveThinkInner.innerHTML = markdownModule.mdToHtml(_liveThinkLatestText);
+          if (isExpanded) {
+            _liveThinkInner.innerHTML = markdownModule.mdToHtml(_liveThinkLatestText);
+          } else {
+            // Collapsed: store the raw text and keep a cheap plain-text copy so
+            // the first expand can render it as markdown (lazy rendering).
+            _liveThinkInner.textContent = _liveThinkLatestText;
+            _liveThinkInner.dataset.thinkingRaw = _liveThinkLatestText;
+            _liveThinkInner.dataset.thinkingRendered = '0';
+          }
         }
         return _liveThinkLatestText;
       };
@@ -3793,6 +3853,11 @@ import { invalidateSettings } from './appConfig.js';
       _cancelLiveThinkingWork = () => {
         if (_liveThinkRenderThrottle) _liveThinkRenderThrottle.cancel();
         _liveThinkRenderThrottle = null;
+        _liveThinkRenderedLen = 0;
+        if (_liveThinkScrollRaf !== null) {
+          cancelAnimationFrame(_liveThinkScrollRaf);
+          _liveThinkScrollRaf = null;
+        }
         _stopLiveThinkTimer();
         _cancelThinkingGrace();
         _removeLiveThinkingSpinner();

@@ -1074,12 +1074,12 @@ body.fullwidth-chat .chat-history {
 }
 
 .thinking-content {
-  max-height: 0;
   overflow: hidden;
-  transition: max-height 0.3s ease, padding 0.3s ease;
   padding: 0 12px;
 }
-
+.thinking-content:not(.expanded) {
+  display: none;
+}
 .thinking-content.expanded {
   max-height: 300px;
   overflow-y: auto;

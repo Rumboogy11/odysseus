@@ -640,6 +640,7 @@ export function extractThinkingBlocks(text) {
 function createThinkingSection(thinkingContent, index = 0, thinkingTime = null) {
   const id = `thinking-${Date.now()}-${index}`;
   const timeHtml = thinkingTime ? `<span style="font-size:11px;opacity:0.4;font-variant-numeric:tabular-nums;">${thinkingTime}s</span>` : '';
+  const raw = escapeHtml(thinkingContent);
   return `
     <div class="thinking-section">
       <div class="thinking-header" data-thinking-id="${id}">
@@ -652,9 +653,7 @@ function createThinkingSection(thinkingContent, index = 0, thinkingTime = null) 
         </div>
       </div>
       <div class="thinking-content" id="${id}">
-        <div class="thinking-content-inner">
-          ${mdToHtml(thinkingContent)}
-        </div>
+        <div class="thinking-content-inner" data-thinking-raw="${raw}" data-thinking-rendered="0">${raw}</div>
       </div>
     </div>
   `;
@@ -1420,12 +1419,25 @@ function _hashThinkingContent(el) {
 }
 function _setThinkingExpanded(content, toggle, header, expanded) {
   if (!content || !toggle) return;
+  const wasExpanded = content.classList.contains('expanded');
   content.classList.toggle('expanded', expanded);
   toggle.classList.toggle('expanded', expanded);
   const label_el = header?.querySelector('.thinking-header-left span');
   if (label_el) {
     const label = label_el.dataset.label || 'thinking process';
     label_el.textContent = expanded ? `Hide ${label}` : `View ${label}`;
+  }
+  // Lazy-render the markdown the first time a thinking section is expanded.
+  // Collapsed sections never pay the parse/HTML/layout cost of mdToHtml.
+  if (expanded && !wasExpanded) {
+    const inner = content.querySelector('.thinking-content-inner');
+    if (inner && inner.dataset.thinkingRendered !== '1') {
+      const raw = inner.dataset.thinkingRaw;
+      if (raw !== undefined && raw !== null) {
+        inner.innerHTML = mdToHtml(raw);
+        inner.dataset.thinkingRendered = '1';
+      }
+    }
   }
 }
 
